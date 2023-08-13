@@ -1,108 +1,176 @@
 package com.s3example.demo.adapters.service;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.*;
-import com.s3example.demo.adapters.representation.BucketObjectRepresentation;
+import com.s3example.demo.adapters.representation.S3BucketObjectRepresentation;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
-@Component
+@Service
 @RequiredArgsConstructor
 public class S3Service {
 
-    private final AmazonS3 amazonS3Client;
+    private final S3Client s3Client;
 
-    //Bucket level operations
+    public void createBucket(String bucketName) {
+        CreateBucketRequest createBucketRequest = CreateBucketRequest.builder()
+                .bucket(bucketName)
+                .build();
 
-    public void createS3Bucket(String bucketName, boolean publicBucket) {
-        if (amazonS3Client.doesBucketExistV2(bucketName)) {
-            log.info("Bucket name already in use. Try another name.");
-            return;
-        }
-        if (publicBucket) {
-            amazonS3Client.createBucket(bucketName);
-        } else {
-            amazonS3Client.createBucket(new CreateBucketRequest(bucketName).withCannedAcl(CannedAccessControlList.Private));
+        try {
+            s3Client.createBucket(createBucketRequest);
+            log.info("Bucket created: {}", createBucketRequest.bucket());
+        } catch (S3Exception e) {
+            log.error("Error creating bucket: {}", e.awsErrorDetails().errorMessage());
         }
     }
 
     public List<Bucket> listBuckets() {
-        return amazonS3Client.listBuckets();
+        return s3Client.listBuckets().buckets();
     }
 
     public void deleteBucket(String bucketName) {
+        DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder()
+                .bucket(bucketName)
+                .build();
+
         try {
-            amazonS3Client.deleteBucket(bucketName);
-        } catch (AmazonServiceException e) {
-            log.error(e.getErrorMessage());
+            s3Client.deleteBucket(deleteBucketRequest);
+            log.info("Bucket deleted: {}", deleteBucketRequest.bucket());
+        } catch (S3Exception e) {
+            log.error("Error deleting bucket: {}", e.awsErrorDetails().errorMessage());
         }
     }
 
-    //Object level operations
-    public void putObject(String bucketName, BucketObjectRepresentation representation, boolean publicObject) throws IOException {
-
-        String objectName = representation.getObjectName();
-        String objectValue = representation.getText();
-
-        File file = new File("." + File.separator + objectName);
-        FileWriter fileWriter = new FileWriter(file, false);
-        PrintWriter printWriter = new PrintWriter(fileWriter);
-        printWriter.println(objectValue);
-        printWriter.flush();
-        printWriter.close();
+    @SneakyThrows
+    public void putObject(String bucketName, S3BucketObjectRepresentation s3BucketObjectRepresentation) {
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(s3BucketObjectRepresentation.getObjectName())
+                .build();
 
         try {
-            if (publicObject) {
-                var putObjectRequest = new PutObjectRequest(bucketName, objectName, file).withCannedAcl(CannedAccessControlList.PublicRead);
-                amazonS3Client.putObject(putObjectRequest);
-            } else {
-                var putObjectRequest = new PutObjectRequest(bucketName, objectName, file).withCannedAcl(CannedAccessControlList.Private);
-                amazonS3Client.putObject(putObjectRequest);
-            }
+            Path file = Files.write(
+                    Paths.get(".", s3BucketObjectRepresentation.getObjectName()),
+                    s3BucketObjectRepresentation.getText().getBytes());
+            s3Client.putObject(putObjectRequest, RequestBody.fromFile(file));
+            log.info("Object created: {}", putObjectRequest.key());
+        } catch (S3Exception e) {
+            log.error("Error uploading object: {}", e.awsErrorDetails().errorMessage());
         } catch (Exception e) {
-            log.error("Some error has ocurred.");
+            log.error(e.getMessage());
+        }
+    }
+
+    public List<S3Object> listObjects(String bucketName) {
+        ListObjectsRequest listObjects = ListObjectsRequest
+                .builder()
+                .bucket(bucketName)
+                .build();
+
+        try {
+            ListObjectsResponse objectListing = s3Client.listObjects(listObjects);
+            return objectListing.contents();
+        } catch (S3Exception e) {
+            log.error(e.awsErrorDetails().errorMessage());
         }
 
+        return Collections.emptyList();
     }
 
-    public List<S3ObjectSummary> listObjects(String bucketName) {
-        ObjectListing objectListing = amazonS3Client.listObjects(bucketName);
-        return objectListing.getObjectSummaries();
-    }
+    public void getObject(String bucketName, String objectName) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(objectName)
+                .build();
 
-    public void downloadObject(String bucketName, String objectName) {
-        S3Object s3object = amazonS3Client.getObject(bucketName, objectName);
-        S3ObjectInputStream inputStream = s3object.getObjectContent();
         try {
-            FileUtils.copyInputStreamToFile(inputStream, new File("." + File.separator + objectName));
+            ResponseInputStream<GetObjectResponse> responseInputStream = s3Client.getObject(getObjectRequest);
+            FileUtils.copyInputStreamToFile(responseInputStream, new File("." + File.separator + objectName));
+        } catch (S3Exception e) {
+            log.error(e.awsErrorDetails().errorMessage());
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
     public void deleteObject(String bucketName, String objectName) {
-        amazonS3Client.deleteObject(bucketName, objectName);
+        DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(objectName)
+                .build();
+
+        try {
+            s3Client.deleteObject(deleteObjectRequest);
+            log.info("Object deleted: {}", deleteObjectRequest.key());
+        } catch (S3Exception e) {
+            log.error("Error deleting object: {}", e.awsErrorDetails().errorMessage());
+        }
     }
 
-    public void deleteMultipleObjects(String bucketName, List<String> objects) {
-        DeleteObjectsRequest delObjectsRequests = new DeleteObjectsRequest(bucketName)
-                .withKeys(objects.toArray(new String[0]));
-        amazonS3Client.deleteObjects(delObjectsRequests);
+    public void deleteObjects(String bucketName, List<String> objects) {
+        ArrayList<ObjectIdentifier> objectIdentifiers = new ArrayList<>();
+
+        objects.forEach(object -> {
+            ObjectIdentifier objectIdentifier = ObjectIdentifier.builder()
+                    .key(object)
+                    .build();
+
+            objectIdentifiers.add(objectIdentifier);
+        });
+
+        Delete delete = Delete.builder()
+                .objects(objectIdentifiers)
+                .build();
+
+        DeleteObjectsRequest deleteObjectsRequest = DeleteObjectsRequest.builder()
+                .bucket(bucketName)
+                .delete(delete)
+                .build();
+
+        try {
+            s3Client.deleteObjects(deleteObjectsRequest);
+            log.info("Objects deleted: {}", objectIdentifiers.stream()
+                    .map(ObjectIdentifier::key)
+                    .collect(Collectors.joining()));
+        } catch (S3Exception e) {
+            log.error("Error deleting objects: {}", e.awsErrorDetails().errorMessage());
+        }
     }
 
-    public void moveObject(String bucketSourceName, String objectName, String bucketTargetName) {
-        amazonS3Client.copyObject(
-                bucketSourceName,
-                objectName,
-                bucketTargetName,
-                objectName
-        );
+    public void moveObject(String sourceBucketName, String objectName, String targetBucketName) {
+        CopyObjectRequest copyObjectRequest = CopyObjectRequest.builder()
+                .sourceBucket(sourceBucketName)
+                .sourceKey(objectName)
+                .destinationBucket(targetBucketName)
+                .destinationKey(objectName)
+                .build();
+
+        try {
+            CopyObjectResponse copyObjectResponse = s3Client.copyObject(copyObjectRequest);
+            // If copy is successful, delete the source object.
+            if (copyObjectResponse != null) {
+                deleteObject(sourceBucketName, objectName);
+                log.info("Object moved and deleted: {}", copyObjectRequest.sourceKey());
+            }
+        } catch (S3Exception e) {
+            log.error(e.awsErrorDetails().errorMessage());
+        }
     }
 }
