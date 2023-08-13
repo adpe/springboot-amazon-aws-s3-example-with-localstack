@@ -22,6 +22,7 @@ public class AWSConfig {
                 .standard()
                 .withCredentials(getCredentialsProvider())
                 .withEndpointConfiguration(getEndpointConfiguration())
+                .withPathStyleAccessEnabled(true)
                 .build();
     }
 
