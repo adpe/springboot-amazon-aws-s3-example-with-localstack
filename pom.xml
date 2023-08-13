@@ -34,7 +34,7 @@
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk</artifactId>
-			<version>1.11.163</version>
+			<version>1.12.528</version>
 		</dependency>
 		<dependency>
 			<groupId>commons-io</groupId>
@@ -64,6 +64,7 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
+					<fork>false</fork>
 					<excludes>
 						<exclude>
 							<groupId>org.projectlombok</groupId>
