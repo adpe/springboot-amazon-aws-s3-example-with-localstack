@@ -3,7 +3,7 @@ package com.s3example.demo.adapters.controller;
 
 import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.s3example.demo.adapters.representation.BucketObjectRepresentaion;
+import com.s3example.demo.adapters.representation.BucketObjectRepresentation;
 import com.s3example.demo.adapters.service.S3Service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -21,24 +21,25 @@ public class ControllerTests {
     private final S3Service s3Service;
 
     @PostMapping(value = "/{bucketName}")
-    public void createBucket(@PathVariable String bucketName, @RequestParam boolean publicBucket){
+    public void createBucket(@PathVariable String bucketName, @RequestParam boolean publicBucket) {
         s3Service.createS3Bucket(bucketName, publicBucket);
     }
 
     @GetMapping
-    public List<String> listBuckets(){
-        var buckets = s3Service.listBuckets();
-        var names = buckets.stream().map(Bucket::getName).collect(Collectors.toList());
-        return names;
+    public List<String> listBuckets() {
+        return s3Service.listBuckets()
+                .stream()
+                .map(Bucket::getName)
+                .collect(Collectors.toList());
     }
 
     @DeleteMapping(value = "/{bucketName}")
-    public void deleteBucket(@PathVariable String bucketName){
+    public void deleteBucket(@PathVariable String bucketName) {
         s3Service.deleteBucket(bucketName);
     }
 
     @PostMapping(value = "/{bucketName}/objects")
-    public void createObject(@PathVariable String bucketName, @RequestBody BucketObjectRepresentaion representaion, @RequestParam boolean publicObject) throws IOException {
+    public void createObject(@PathVariable String bucketName, @RequestBody BucketObjectRepresentation representaion, @RequestParam boolean publicObject) throws IOException {
         s3Service.putObject(bucketName, representaion, publicObject);
     }
 
@@ -67,5 +68,4 @@ public class ControllerTests {
     public void deleteObject(@PathVariable String bucketName, @RequestBody List<String> objects) {
         s3Service.deleteMultipleObjects(bucketName, objects);
     }
-
 }

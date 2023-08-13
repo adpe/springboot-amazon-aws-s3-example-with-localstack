@@ -3,7 +3,7 @@ package com.s3example.demo.adapters.service;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.*;
-import com.s3example.demo.adapters.representation.BucketObjectRepresentaion;
+import com.s3example.demo.adapters.representation.BucketObjectRepresentation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -22,32 +22,31 @@ public class S3Service {
     //Bucket level operations
 
     public void createS3Bucket(String bucketName, boolean publicBucket) {
-        if(amazonS3Client.doesBucketExist(bucketName)) {
+        if (amazonS3Client.doesBucketExistV2(bucketName)) {
             log.info("Bucket name already in use. Try another name.");
             return;
         }
-        if(publicBucket) {
+        if (publicBucket) {
             amazonS3Client.createBucket(bucketName);
         } else {
             amazonS3Client.createBucket(new CreateBucketRequest(bucketName).withCannedAcl(CannedAccessControlList.Private));
         }
     }
 
-    public List<Bucket> listBuckets(){
+    public List<Bucket> listBuckets() {
         return amazonS3Client.listBuckets();
     }
 
-    public void deleteBucket(String bucketName){
+    public void deleteBucket(String bucketName) {
         try {
             amazonS3Client.deleteBucket(bucketName);
         } catch (AmazonServiceException e) {
             log.error(e.getErrorMessage());
-            return;
         }
     }
 
     //Object level operations
-    public void putObject(String bucketName, BucketObjectRepresentaion representation, boolean publicObject) throws IOException {
+    public void putObject(String bucketName, BucketObjectRepresentation representation, boolean publicObject) throws IOException {
 
         String objectName = representation.getObjectName();
         String objectValue = representation.getText();
@@ -60,25 +59,25 @@ public class S3Service {
         printWriter.close();
 
         try {
-            if(publicObject) {
+            if (publicObject) {
                 var putObjectRequest = new PutObjectRequest(bucketName, objectName, file).withCannedAcl(CannedAccessControlList.PublicRead);
                 amazonS3Client.putObject(putObjectRequest);
             } else {
                 var putObjectRequest = new PutObjectRequest(bucketName, objectName, file).withCannedAcl(CannedAccessControlList.Private);
                 amazonS3Client.putObject(putObjectRequest);
             }
-        } catch (Exception e){
+        } catch (Exception e) {
             log.error("Some error has ocurred.");
         }
 
     }
 
-    public List<S3ObjectSummary> listObjects(String bucketName){
+    public List<S3ObjectSummary> listObjects(String bucketName) {
         ObjectListing objectListing = amazonS3Client.listObjects(bucketName);
         return objectListing.getObjectSummaries();
     }
 
-    public void downloadObject(String bucketName, String objectName){
+    public void downloadObject(String bucketName, String objectName) {
         S3Object s3object = amazonS3Client.getObject(bucketName, objectName);
         S3ObjectInputStream inputStream = s3object.getObjectContent();
         try {
@@ -88,17 +87,17 @@ public class S3Service {
         }
     }
 
-    public void deleteObject(String bucketName, String objectName){
+    public void deleteObject(String bucketName, String objectName) {
         amazonS3Client.deleteObject(bucketName, objectName);
     }
 
-    public void deleteMultipleObjects(String bucketName, List<String> objects){
+    public void deleteMultipleObjects(String bucketName, List<String> objects) {
         DeleteObjectsRequest delObjectsRequests = new DeleteObjectsRequest(bucketName)
                 .withKeys(objects.toArray(new String[0]));
         amazonS3Client.deleteObjects(delObjectsRequests);
     }
 
-    public void moveObject(String bucketSourceName, String objectName, String bucketTargetName){
+    public void moveObject(String bucketSourceName, String objectName, String bucketTargetName) {
         amazonS3Client.copyObject(
                 bucketSourceName,
                 objectName,
@@ -106,5 +105,4 @@ public class S3Service {
                 objectName
         );
     }
-
 }
